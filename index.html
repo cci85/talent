@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>計畫工作台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="banner" hidden></div>
+<div id="lock" hidden>
+  <div class="lockbox">
+    <h1>計畫工作台</h1>
+    <p id="lockMsg"></p>
+    <input type="password" id="pw1" placeholder="密碼" autocomplete="current-password">
+    <input type="password" id="pw2" placeholder="再輸入一次" hidden autocomplete="new-password">
+    <button id="pwGo" class="primary">進入</button>
+  </div>
+</div>
+<div id="app" hidden>
+  <header>
+    <div class="brand">人才培育計畫工作台</div>
+    <select id="planSel" title="切換計畫"></select>
+    <button data-a="newPlan">＋計畫</button>
+    <span class="grow"></span>
+    <span id="saved" class="muted"></span>
+    <button data-a="export" title="把所有資料（含照片、自訂範本）存成一個檔案">匯出備份</button>
+    <label class="btn" title="從備份檔還原（會覆蓋目前資料）">匯入備份<input type="file" id="importFile" accept=".json" hidden></label>
+  </header>
+  <div class="layout">
+    <nav id="side"></nav>
+    <main id="main"></main>
+  </div>
+</div>
+<div id="modal" hidden><div class="mbox" id="mbox"></div></div>
+<div id="toast" hidden></div>
+<script src="lib/jszip.min.js"></script>
+<script src="engine.js"></script>
+<script src="defs.js"></script>
+<script src="model.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
