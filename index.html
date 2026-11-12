@@ -25,9 +25,10 @@
     <button data-a="newPlan">＋計畫</button>
     <span class="grow"></span>
     <span id="saved" class="muted"></span>
-    <button data-a="export" title="把所有資料（含照片、自訂範本）存成一個檔案">匯出備份</button>
-    <label class="btn" title="從備份檔還原（會覆蓋目前資料）">匯入備份<input type="file" id="importFile" accept=".json" hidden></label>
+    <button data-a="export" title="把這台電腦上所有計畫（含照片、自訂範本）存成一個 .json 檔">匯出全部</button>
+    <label class="btn" title="從 .json 備份檔還原（會覆蓋目前資料）">匯入 .json<input type="file" id="importFile" accept=".json" hidden></label>
   </header>
+  <div id="fbar"></div>
   <div class="layout">
     <nav id="side"></nav>
     <main id="main"></main>
@@ -40,5 +41,6 @@
 <script src="defs.js"></script>
 <script src="model.js"></script>
 <script src="app.js"></script>
+<script src="file.js"></script>
 </body>
 </html>

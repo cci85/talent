@@ -17,6 +17,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 .muted { color: var(--muted); font-size: 13px; }
 .grow { flex: 1; }
 
+#fbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 16px; background: #f0f4f8; border-bottom: 1px solid var(--line); font-size: 14px; position: sticky; top: 50px; z-index: 4; }
+#fbar .warn, .fstat.warn { color: var(--warn); }
+.fstat { color: var(--muted); font-size: 13px; }
+.filepick { display: block; width: 100%; text-align: left; margin-bottom: 6px; }
+.filepick small { display: block; color: var(--muted); }
 #banner { background: #fff3cd; border-bottom: 1px solid #e0c36b; padding: 8px 16px; text-align: center; }
 #lock { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg); }
 .lockbox { background: #fff; padding: 32px; border-radius: 10px; width: 320px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 20px #0001; }
@@ -26,7 +31,7 @@ header { display: flex; align-items: center; gap: 8px; padding: 8px 16px; backgr
 header .brand { font-weight: 700; margin-right: 8px; }
 header select { width: auto; max-width: 320px; }
 .layout { display: flex; min-height: calc(100vh - 50px); }
-nav#side { width: 250px; flex: none; background: #fff; border-right: 1px solid var(--line); padding: 10px 0; position: sticky; top: 50px; height: calc(100vh - 50px); overflow: auto; }
+nav#side { width: 250px; flex: none; background: #fff; border-right: 1px solid var(--line); padding: 10px 0; position: sticky; top: 88px; height: calc(100vh - 88px); overflow: auto; }
 nav .sec { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 4px; color: var(--muted); font-size: 13px; }
 nav a { display: block; padding: 6px 14px; color: var(--ink); text-decoration: none; cursor: pointer; border-left: 3px solid transparent; }
 nav a.sub { padding-left: 30px; font-size: 14px; color: #444; }

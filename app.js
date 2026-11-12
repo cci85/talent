@@ -1,6 +1,6 @@
 /* 計畫工作台：介面 */
 (function () {
-  const VERSION = '2026.11.12-2';
+  const VERSION = '2026.11.12-3';
   const D = self.DEFS, M = self.MODEL, E = self.TalentEngine;
   const KEY = 'talent.v1', PWKEY = 'talent.pw';
   const $ = (s, el) => (el || document).querySelector(s);
@@ -8,23 +8,27 @@
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   // ---------------- 儲存 ----------------
-  let S = null;
+  let S = null, started = false;
   function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } }
   let saveTimer = null;
   function save(now) {
     clearTimeout(saveTimer);
     const go = () => {
-      try { localStorage.setItem(KEY, JSON.stringify(S)); $('#saved').textContent = '已儲存 ' + new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }); }
-      catch (e) { alert('儲存失敗：瀏覽器空間不足。請先匯出備份。'); }
+      if (saveLocal()) $('#saved').textContent = '瀏覽器已儲存 ' + new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+      if (self.onStoreSave) self.onStoreSave();
     };
     if (now) go(); else saveTimer = setTimeout(go, 400);
+  }
+  function saveLocal() {
+    try { localStorage.setItem(KEY, JSON.stringify(S)); return true; }
+    catch (e) { alert('儲存失敗：瀏覽器空間不足。請先匯出備份。'); return false; }
   }
   const DB = { db: null };
   function idb() {
     if (DB.db) return Promise.resolve(DB.db);
     return new Promise((res, rej) => {
-      const r = indexedDB.open('talent', 1);
-      r.onupgradeneeded = () => { r.result.createObjectStore('photos'); r.result.createObjectStore('files'); };
+      const r = indexedDB.open('talent', 2);
+      r.onupgradeneeded = () => { ['photos', 'files', 'kv'].forEach((n) => { if (!r.result.objectStoreNames.contains(n)) r.result.createObjectStore(n); }); };
       r.onsuccess = () => { DB.db = r.result; res(DB.db); };
       r.onerror = () => rej(r.error);
     });
@@ -381,7 +385,7 @@
   document.addEventListener('change', async (e) => {
     const el = e.target;
     if (el.dataset.k && (el.tagName === 'SELECT' || el.type === 'checkbox')) { setField(el); rerenderKeep(); }
-    if (el.id === 'planSel') { S.cur = el.value; go({ page: 'plan' }); }
+    if (el.id === 'planSel') { if (self.__talentFile) await self.__talentFile.writeNow(); S.cur = el.value; go({ page: 'plan' }); if (self.__talentFile) self.__talentFile.attach(S.cur, false); }
     if (el.dataset.upphoto) { await addPhotos(el.files, el.dataset.upphoto); }
     if (el.dataset.upcustom) { await uploadCustom(el.files[0]); el.value = ''; }
     if (el.id === 'importFile') { await importBackup(el.files[0]); el.value = ''; }
@@ -455,9 +459,9 @@
 
   // ---------------- 對話框 ----------------
   function openModal(html, onOk) {
-    $('#mbox').innerHTML = html + `<div class="row"><button data-a="mclose">取消</button><button class="primary" id="mok">確定</button></div>`;
+    $('#mbox').innerHTML = html + `<div class="row"><button data-a="mclose">取消</button>${onOk ? '<button class="primary" id="mok">確定</button>' : ''}</div>`;
     $('#modal').hidden = false;
-    $('#mok').onclick = async () => { if ((await onOk()) !== false) closeModal(); };
+    if (onOk) $('#mok').onclick = async () => { if ((await onOk()) !== false) closeModal(); };
   }
   function closeModal() { $('#modal').hidden = true; $('#mbox').innerHTML = ''; }
 
@@ -481,6 +485,7 @@
       if ($('#npCopy').checked) ['school', 'dept', 'pi', 'piTitle', 'park', 'field', 'type'].forEach((k) => { if (plan().data[k]) np.data[k] = plan().data[k]; });
       np.name = $('#npName').value.trim() || '新計畫'; np.data.title = np.name;
       S.plans.push(np); S.cur = np.id; go({ page: 'plan' });
+      if (self.__talentFile) self.__talentFile.attach(S.cur, false);
     });
   }
 
@@ -577,6 +582,7 @@
     for (const k of Object.keys(d.files || {})) { const b = atob(d.files[k].b64); const u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); await idbPut('files', k, { buf: u.buffer, name: d.files[k].name }); }
     Object.keys(scanCache).forEach((k) => delete scanCache[k]);
     save(true); render(); toast('已匯入備份');
+    if (self.__talentFile) self.__talentFile.attach(S.cur, false);
   }
 
   // ---------------- 密碼與啟動 ----------------
@@ -587,6 +593,8 @@
     save(true);
     $('#lock').hidden = true; $('#app').hidden = false;
     render();
+    started = true;
+    if (self.__talentFileInit) self.__talentFileInit();
   }
   function lock() {
     const has = localStorage.getItem(PWKEY);
@@ -610,6 +618,8 @@
   fetch('version.json', { cache: 'no-store' }).then((r) => r.json()).then((j) => {
     if (j.version && j.version !== VERSION) { const b = $('#banner'); b.hidden = false; b.textContent = '網站已更新，請按 Ctrl+F5 重新整理。資料存在這台電腦的瀏覽器，重新整理不會遺失。'; }
   }).catch(() => {});
-  self.__talent = { get S() { return S; }, buildFile, M };
+  const kvGet = (k) => idbGet('kv', k).catch(() => null);
+  const kvSet = (k, v) => idbPut('kv', k, v).catch(() => {});
+  self.__talent = { get S() { return S; }, get started() { return started; }, plan, render, saveLocal, idbGet, idbPut, kvGet, kvSet, dataUrlBytes, openModal, closeModal, saveBlob, buildFile, M };
   lock();
 })();
