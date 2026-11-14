@@ -101,10 +101,10 @@
   function fileText(p, notes, stem) {
     const ts = new Date().toLocaleString('zh-TW', { hour12: false });
     const title = p.name || p.data.title || '';
-    return ['---', `title: ${title}`, `updated: ${ts}`, 'source: 你畫了嗎', '---', '',
+    return ['---', `title: ${title}`, `updated: ${ts}`, 'source: 你畫了沒', '---', '',
       `# ${title}`, '', '## 我的筆記', NOTE_START, notes || NOTE_EMPTY, NOTE_END, '',
       readable(p, stem), '',
-      '<!-- ' + TAG + '（「你畫了嗎」讀回資料用，閱讀時不顯示，請勿修改）', payOf(p).replace(/>/g, '\\u003e'), '-->', ''].join('\n');
+      '<!-- ' + TAG + '（「你畫了沒」讀回資料用，閱讀時不顯示，請勿修改）', payOf(p).replace(/>/g, '\\u003e'), '-->', ''].join('\n');
   }
 
   // ---------- 資料夾與權限 ----------
@@ -165,7 +165,7 @@
       const f = await fh.getFile(), old = f.size ? await f.text() : '', notes = notesOf(old), pay = payOf(p);
       if (old.trim()) {
         const d = parseFile(old);
-        if (!d) { unbind(`「${name}」不是「你畫了嗎」的存檔，已停止自動存檔，檔案沒有被修改。`); return; }
+        if (!d) { unbind(`「${name}」不是「你畫了沒」的存檔，已停止自動存檔，檔案沒有被修改。`); return; }
         if (d.plan.id !== p.id) { unbind(`「${name}」是另一個計畫「${d.plan.name || d.plan.data.title || ''}」的存檔，已停止自動存檔，檔案沒有被修改。請按「開啟計畫檔」。`); return; }
         const theirs = payOf(d.plan);
         if (f.lastModified !== proj.lastMod && theirs !== pay && theirs !== proj.lastPayload) {
@@ -247,7 +247,7 @@
     }
     items.sort((a, b) => b.t - a.t);
     proj.pending = dir;
-    T.openModal(`<h3>開啟計畫檔：${esc(dir.name)}</h3>${items.length ? items.map((x) => `<button class="filepick" data-fopen="${esc(x.n)}"><b>${esc(x.n.replace(/\.md$/i, ''))}</b><small>${esc(x.name)}｜${new Date(x.t).toLocaleString('zh-TW', { hour12: false })}</small></button>`).join('') : '<p class="muted">這個資料夾沒有「你畫了嗎」的存檔。要把目前的計畫存到這裡，請按「存到資料夾」。</p>'}`, null);
+    T.openModal(`<h3>開啟計畫檔：${esc(dir.name)}</h3>${items.length ? items.map((x) => `<button class="filepick" data-fopen="${esc(x.n)}"><b>${esc(x.n.replace(/\.md$/i, ''))}</b><small>${esc(x.name)}｜${new Date(x.t).toLocaleString('zh-TW', { hour12: false })}</small></button>`).join('') : '<p class="muted">這個資料夾沒有「你畫了沒」的存檔。要把目前的計畫存到這裡，請按「存到資料夾」。</p>'}`, null);
   }
   async function openFromDir(name) {
     const dir = proj.pending; proj.pending = null; T.closeModal(); if (!dir) return;

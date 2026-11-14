@@ -1,6 +1,6 @@
-/* 你畫了嗎：介面 */
+/* 你畫了沒：介面 */
 (function () {
-  const VERSION = '2026.11.14-2';
+  const VERSION = '2026.11.14-3';
   const D = self.DEFS, M = self.MODEL, E = self.TalentEngine;
   const KEY = 'talent.v1', PWKEY = 'talent.pw';
   const $ = (s, el) => (el || document).querySelector(s);
@@ -582,7 +582,7 @@
       files[k] = { name: f.name, b64: btoa(s) };
     }
     const d = new Date(); const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-    saveBlob(new Blob([JSON.stringify({ app: 'talent', version: VERSION, state: S, photos, files })], { type: 'application/json' }), `你畫了嗎備份_${stamp}.json`);
+    saveBlob(new Blob([JSON.stringify({ app: 'talent', version: VERSION, state: S, photos, files })], { type: 'application/json' }), `你畫了沒備份_${stamp}.json`);
   }
   async function importBackup(file) {
     if (!file) return;
