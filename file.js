@@ -57,18 +57,20 @@
   }
   function readable(p, stem) {
     const out = [];
-    const planKeys = Object.keys(D.F).filter((k) => D.F[k].scope === 'plan').concat(Object.keys(p.customFields || {}).filter((k) => p.customFields[k].scope === 'plan'));
+    const K = M.kindOf(p);
+    const planKeys = K.planFields.concat(Object.keys(p.customFields || {}).filter((k) => p.customFields[k].scope === 'plan'));
     const groups = {};
     planKeys.forEach((k) => { const g = (M.fieldDef(p, k) || {}).group || '其他'; (groups[g] = groups[g] || []).push(k); });
-    out.push('## 計畫資料');
+    out.push('## 計畫資料', '', `**計畫類別**：${K.name}`, '');
     Object.keys(groups).forEach((g) => {
       const lines = fieldLines(p, null, groups[g]);
-      if (g === '計畫內容') {
-        ['ms', 'staff'].forEach((n) => { const t = tableMd(p, null, n, D.L[n].cols.filter((c) => c.scope === 'plan')); if (t) lines.push(`**${D.L[n].label}**\n\n${t}`); });
+      {
+        K.planLists.filter((n) => D.L[n].group === g).forEach((n) => { const t = tableMd(p, null, n, D.L[n].cols.filter((c) => c.scope === 'plan')); if (t) lines.push(`**${D.L[n].label}**\n\n${t}`); });
       }
       if (lines.length) out.push(`### ${g}`, '', lines.join('\n\n'), '');
     });
-    if (p.responses && p.responses.p0 && p.responses.p0.trim()) out.push('### AI 回覆：從計畫書擷取基本資料', '', p.responses.p0.trim(), '');
+    const pp = K.planPrompt;
+    if (pp && p.responses && p.responses[pp] && p.responses[pp].trim()) out.push(`### AI 回覆：${D.P[pp].title}`, '', p.responses[pp].trim(), '');
     (p.activities || []).forEach((a) => {
       out.push(`## 活動：${a.name}`, '');
       const AT = D.ACT[a.type] || { groups: [], lists: [], prompts: [] };
@@ -99,10 +101,10 @@
   function fileText(p, notes, stem) {
     const ts = new Date().toLocaleString('zh-TW', { hour12: false });
     const title = p.name || p.data.title || '';
-    return ['---', `title: ${title}`, `updated: ${ts}`, 'source: 計畫工作台', '---', '',
+    return ['---', `title: ${title}`, `updated: ${ts}`, 'source: 你畫了嗎', '---', '',
       `# ${title}`, '', '## 我的筆記', NOTE_START, notes || NOTE_EMPTY, NOTE_END, '',
       readable(p, stem), '',
-      '<!-- ' + TAG + '（「計畫工作台」讀回資料用，閱讀時不顯示，請勿修改）', payOf(p).replace(/>/g, '\\u003e'), '-->', ''].join('\n');
+      '<!-- ' + TAG + '（「你畫了嗎」讀回資料用，閱讀時不顯示，請勿修改）', payOf(p).replace(/>/g, '\\u003e'), '-->', ''].join('\n');
   }
 
   // ---------- 資料夾與權限 ----------
@@ -163,7 +165,7 @@
       const f = await fh.getFile(), old = f.size ? await f.text() : '', notes = notesOf(old), pay = payOf(p);
       if (old.trim()) {
         const d = parseFile(old);
-        if (!d) { unbind(`「${name}」不是計畫工作台的存檔，已停止自動存檔，檔案沒有被修改。`); return; }
+        if (!d) { unbind(`「${name}」不是「你畫了嗎」的存檔，已停止自動存檔，檔案沒有被修改。`); return; }
         if (d.plan.id !== p.id) { unbind(`「${name}」是另一個計畫「${d.plan.name || d.plan.data.title || ''}」的存檔，已停止自動存檔，檔案沒有被修改。請按「開啟計畫檔」。`); return; }
         const theirs = payOf(d.plan);
         if (f.lastModified !== proj.lastMod && theirs !== pay && theirs !== proj.lastPayload) {
@@ -220,7 +222,7 @@
     }
   }
   async function applyData(d, dir, file, mod) {
-    const p = d.plan;
+    const p = M.migratePlan(d.plan);
     backupCurrent(p);
     const i = T.S.plans.findIndex((x) => x.id === p.id);
     if (i >= 0) T.S.plans[i] = p; else T.S.plans.push(p);
@@ -245,7 +247,7 @@
     }
     items.sort((a, b) => b.t - a.t);
     proj.pending = dir;
-    T.openModal(`<h3>開啟計畫檔：${esc(dir.name)}</h3>${items.length ? items.map((x) => `<button class="filepick" data-fopen="${esc(x.n)}"><b>${esc(x.n.replace(/\.md$/i, ''))}</b><small>${esc(x.name)}｜${new Date(x.t).toLocaleString('zh-TW', { hour12: false })}</small></button>`).join('') : '<p class="muted">這個資料夾沒有計畫工作台的存檔。要把目前的計畫存到這裡，請按「存到資料夾」。</p>'}`, null);
+    T.openModal(`<h3>開啟計畫檔：${esc(dir.name)}</h3>${items.length ? items.map((x) => `<button class="filepick" data-fopen="${esc(x.n)}"><b>${esc(x.n.replace(/\.md$/i, ''))}</b><small>${esc(x.name)}｜${new Date(x.t).toLocaleString('zh-TW', { hour12: false })}</small></button>`).join('') : '<p class="muted">這個資料夾沒有「你畫了嗎」的存檔。要把目前的計畫存到這裡，請按「存到資料夾」。</p>'}`, null);
   }
   async function openFromDir(name) {
     const dir = proj.pending; proj.pending = null; T.closeModal(); if (!dir) return;

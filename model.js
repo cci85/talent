@@ -9,28 +9,41 @@
   function fieldDef(plan, key) { return D.F[key] || (plan && plan.customFields && plan.customFields[key]) || null; }
   function scopeOf(plan, key) { const f = fieldDef(plan, key); return f ? f.scope : 'act'; }
 
+  // ---------- 計畫類別 ----------
+  function kindOf(plan) { return D.KINDS[plan && plan.kind] || D.KINDS[D.DEFAULT_KIND]; }
+  // 舊資料（尚無類別）一律歸入預設類別
+  function migratePlan(plan) { if (plan && !D.KINDS[plan.kind]) plan.kind = D.DEFAULT_KIND; return plan; }
+  function migrate(state) { ((state && state.plans) || []).forEach(migratePlan); return state; }
+  function actTypes(plan) { return kindOf(plan).acts.concat(['blank']).filter((k) => D.ACT[k]); }
+  // 此類別會用到的所有欄位（計畫欄位＋各活動類型群組內的欄位）
+  function kindFields(plan) {
+    const K = kindOf(plan), groups = new Set();
+    K.acts.forEach((t) => (D.ACT[t].groups || []).forEach((g) => groups.add(g)));
+    return K.planFields.concat(Object.keys(D.F).filter((k) => D.F[k].scope === 'act' && groups.has(D.F[k].group)));
+  }
+  function isPlanPrompt(pid) { return !!(D.P[pid] && D.P[pid].scope === 'plan'); }
+
   // ---------- 建立 ----------
-  function newPlan(withSeed) {
-    const p = { id: uid(), name: '', data: {}, lists: { ms: [], staff: [] }, activities: [], customFields: {}, conflicts: [] };
+  function newPlan(withSeed, kind) {
+    const p = { id: uid(), kind: D.KINDS[kind] ? kind : D.DEFAULT_KIND, name: '', data: {}, lists: {}, activities: [], customFields: {}, conflicts: [] };
+    kindOf(p).planLists.forEach((n) => { p.lists[n] = []; });
     if (withSeed) {
       p.data = clone(D.SEED.plan);
-      p.lists.ms = D.SEED.lists.ms.map((r) => Object.assign({ id: uid() }, r));
-      p.lists.staff = D.SEED.lists.staff.map((r) => Object.assign({ id: uid() }, r));
+      Object.keys(D.SEED.lists).forEach((n) => { if (p.lists[n]) p.lists[n] = D.SEED.lists[n].map((r) => Object.assign({ id: uid() }, r)); });
       p.name = p.data.title;
     }
     return p;
   }
   function newActivity(plan, type, name, copyFrom, withSeed) {
-    const a = { id: uid(), type, name: name || D.ACT[type].name, data: {}, lists: { agenda: [], interns: [] }, listCols: {}, overrides: {}, unlinked: {}, photos: [], customTemplates: [], responses: {} };
+    const AT = D.ACT[type];
+    const a = { id: uid(), type, name: name || AT.name, data: {}, lists: {}, listCols: {}, overrides: {}, unlinked: {}, photos: [], customTemplates: [], responses: {} };
+    (AT.lists || []).filter((n) => D.L[n] && D.L[n].scope === 'act').forEach((n) => { a.lists[n] = []; });
     if (copyFrom) {
       ['data', 'lists', 'listCols', 'overrides', 'unlinked'].forEach((k) => { a[k] = clone(copyFrom[k] || {}); });
-    } else if (withSeed && type === 'visit') {
-      a.data = clone(D.SEED.visit);
+    } else if (withSeed && D.SEED[type]) {
+      a.data = clone(D.SEED[type]);
     }
-    if (type === 'visit' && !(a.lists.agenda || []).length) {
-      const g = getter(plan, a);
-      a.lists.agenda = D.agendaTimes(D.defaultAgenda(g), g('visitStart')).map((r) => Object.assign({ id: uid() }, r));
-    }
+    if (AT.init) AT.init(a, getter(plan, a), uid);
     plan.activities.push(a);
     return a;
   }
@@ -94,9 +107,9 @@
   }
   function listCols(pid, name) {
     const L = D.L[name];
-    if (pid === 'p0') return L.cols.filter((c) => c.scope === 'plan');
+    if (isPlanPrompt(pid)) return L.cols.filter((c) => c.scope === 'plan');
     if (L.scope === 'plan') {
-      const idc = L.cols.filter((c) => c.scope === 'plan').slice(0, name === 'staff' ? 3 : 2);
+      const idc = L.cols.filter((c) => c.scope === 'plan').slice(0, L.idCols || 2);
       return idc.concat(L.cols.filter((c) => c.ai === pid));
     }
     return L.cols.filter((c) => c.k !== 'min');
@@ -117,12 +130,9 @@
   function buildPrompt(pid, plan, act) {
     const P = promptDef(pid, plan, act);
     const g = getter(plan, act);
-    const lines = [D.PREFACE(g), '', '## 已知資料'];
+    const lines = [D.PREFACE(g, kindOf(plan)), '', '## 已知資料'];
     P.context.forEach((k) => { const v = g(k); if (!empty(v)) lines.push(`- ${outLabel(plan, k)}：${show(plan, k, v).replace(/\*\*/g, '').replace(/\n/g, '；')}`); });
-    if (pid !== 'p0') {
-      const ag = list(plan, act, 'staff');
-      if (ag.length && pid === 'p2') lines.push(`- 計畫人員：${ag.map((s) => `${s.name}（${s.role}）`).join('、')}`);
-    }
+    if (P.extra) P.extra((n) => list(plan, act, n)).forEach((l) => lines.push(l));
     lines.push('', '## 請撰寫的內容');
     P.outputs.forEach(([k, hint], i) => lines.push(`${i + 1}. 【${outLabel(plan, k)}】${hint}`));
     lines.push('', '## 輸出格式', D.FORMAT, '');
@@ -132,7 +142,7 @@
       const name = k.slice(1), cols = listCols(pid, name);
       lines.push('| 序號 | ' + cols.map((c) => c.label).join(' | ') + ' |');
       lines.push('|---|' + cols.map(() => '---').join('|') + '|');
-      const rows = pid === 'p0' ? [] : D.L[name].scope === 'plan' ? list(plan, act, name) : [];
+      const rows = isPlanPrompt(pid) ? [] : D.L[name].scope === 'plan' ? list(plan, act, name) : [];
       if (rows.length) rows.forEach((r, ri) => lines.push(`| ${ri + 1} | ` + cols.map((c) => (c.scope === 'plan' && c.ai !== pid ? String(r[c.k] || '') : '')).join(' | ') + ' |'));
       else lines.push('| 1 | ' + cols.map(() => '').join(' | ') + ' |');
       lines.push('');
@@ -221,7 +231,7 @@
     });
     Object.keys(parsed.lists).forEach((name) => {
       const L = D.L[name], rows = parsed.lists[name], cols = listCols(pid, name);
-      if (L.scope === 'plan' && pid === 'p0') {
+      if (L.scope === 'plan' && isPlanPrompt(pid)) {
         const cur = plan.lists[name] || (plan.lists[name] = []);
         rows.forEach((r, i) => {
           let row = cur[i];
@@ -262,6 +272,6 @@
     return null;
   }
 
-  self.MODEL = { uid, clone, empty, fieldDef, scopeOf, newPlan, newActivity, rawVal, setVal, list, getter, defaultOf, makeCtx, placeholderFields,
+  self.MODEL = { kindOf, migratePlan, migrate, actTypes, kindFields, isPlanPrompt, uid, clone, empty, fieldDef, scopeOf, newPlan, newActivity, rawVal, setVal, list, getter, defaultOf, makeCtx, placeholderFields,
     buildPrompt, parseResponse, applyResult, resolveRef, promptDef, addConflict, outLabel, listCols };
 })();

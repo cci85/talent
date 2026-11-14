@@ -1,6 +1,6 @@
-/* 計畫工作台：介面 */
+/* 你畫了嗎：介面 */
 (function () {
-  const VERSION = '2026.11.14-1';
+  const VERSION = '2026.11.14-2';
   const D = self.DEFS, M = self.MODEL, E = self.TalentEngine;
   const KEY = 'talent.v1', PWKEY = 'talent.pw';
   const $ = (s, el) => (el || document).querySelector(s);
@@ -46,8 +46,9 @@
   const idbAll = (s) => idbOp(s, 'readonly', (st) => st.getAllKeys());
 
   function seed() {
-    const plan = M.newPlan(true);
-    const act = M.newActivity(plan, 'visit', '人培查訪', null, true);
+    const plan = M.newPlan(true, D.DEFAULT_KIND);
+    const first = M.kindOf(plan).acts[0] || 'blank';
+    const act = M.newActivity(plan, first, D.ACT[first].name, null, true);
     plan.name = '我的計畫';
     D.SEED.conflicts.forEach((c) => M.addConflict(plan, { actId: c.scope === 'plan' ? null : act.id, ref: 'f:' + c.key, ai: c.ai, src: c.src, label: M.outLabel(plan, c.key) }));
     return { plans: [plan], cur: plan.id, view: { page: 'act', actId: act.id, tab: 'fill' } };
@@ -89,7 +90,7 @@
   async function blankCount(p, act, tplId) {
     const { fields } = await scanTpl(act, tplId);
     const g = M.getter(p, act, tplId);
-    const skip = ['partnerOther', 'officeEmail', 's1firm', 's2firm', 's3firm', 'evalDate'];
+    const skip = (D.ACT[act.type] || {}).optional || [];
     return fields.filter((k) => skip.indexOf(k) < 0 && (M.fieldDef(p, k) || {}).type !== 'check' && M.empty(g(k))).length;
   }
   function dataUrlBytes(u) {
@@ -170,7 +171,7 @@
         const st = confs.indexOf(ref) >= 0 ? ' style="border-color:#e39b3b;background:#fffaf2"' : '';
         const data = `data-l="${name}" data-r="${r.id}" data-c="${c.k}"${st}`;
         return `<td>${c.area ? `<textarea ${data} rows="${Math.min(6, Math.max(2, String(val).split('\n').length))}">${esc(val)}</textarea>` : `<input ${data} value="${esc(val)}">`}</td>`;
-      }).join('')}<td class="ops">${L.scope === 'act' || mode === 'plan' || name === 'ms' || name === 'staff' ? `<button class="small" data-a="rowUp" data-l="${name}" data-r="${r.id}" title="上移">↑</button><button class="small danger" data-a="rowDel" data-l="${name}" data-r="${r.id}" title="刪除此列">✕</button>` : ''}</td></tr>`;
+      }).join('')}<td class="ops">${`<button class="small" data-a="rowUp" data-l="${name}" data-r="${r.id}" title="上移">↑</button><button class="small danger" data-a="rowDel" data-l="${name}" data-r="${r.id}" title="刪除此列">✕</button>`}</td></tr>`;
     }).join('');
     const extra = name === 'agenda' ? `<button class="small" data-a="agTimes">依開始時間重算各列時間</button><button class="small" data-a="agReset">依目前資料重建議程</button><span class="muted">「分鐘」為每段長度；重算後時間會依「查訪內容」的開始時間排出。</span>` : '';
     const note = L.scope === 'plan' && mode !== 'plan' ? '<div class="muted">黑色欄位為計畫共用（修改會同步到所有活動），綠色標題欄位只屬於本活動。</div>' : '';
@@ -215,18 +216,21 @@
 
   function pagePlan() {
     const p = plan();
-    const keys = Object.keys(D.F).filter((k) => D.F[k].scope === 'plan').concat(Object.keys(p.customFields).filter((k) => p.customFields[k].scope === 'plan'));
+    const K = M.kindOf(p);
+    const keys = K.planFields.concat(Object.keys(p.customFields).filter((k) => p.customFields[k].scope === 'plan'));
     const groups = groupedFields(p, keys);
-    let h = `<h2>計畫資料</h2><div class="note">這裡的資料所有活動、所有範本共用；在任何地方修改都會同步。可先用下方 prompt 從計畫書一次擷取。</div>`;
+    let h = `<div class="row" style="margin-bottom:6px"><h2 style="margin:0">計畫資料</h2><span class="muted">計畫類別：${esc(K.name)}</span></div><div class="note">這裡的資料所有活動、所有範本共用；在任何地方修改都會同步。${K.planPrompt ? '可先用下方 prompt 從計畫書一次擷取。' : ''}</div>`;
     h += `<div class="card"><div class="grid"><div class="fld"><label>計畫顯示名稱（只用於切換計畫）</label><input data-pn="1" value="${esc(p.name)}"></div></div></div>`;
     h += conflictPanel(p, null);
-    h += promptCard(p, null, 'p0');
+    if (K.planPrompt) h += promptCard(p, null, K.planPrompt);
+    const shown = new Set();
     Object.keys(groups).forEach((g) => {
       h += `<div class="card"><h3>${esc(g)}</h3><div class="grid">${groups[g].map((k) => fieldHTML(p, null, k)).join('')}</div>`;
-      if (g === '合作廠商與經費') h += `<div class="calc" style="margin-top:8px">計畫總經費（自動加總）：${esc(D.C.totalFmt.fn(M.getter(p, null))) || '—'}</div>`;
+      if (K.planCalcs && K.planCalcs[g]) h += `<div class="calc" style="margin-top:8px">${esc(K.planCalcs[g](M.getter(p, null)))}</div>`;
       h += '</div>';
-      if (g === '計畫內容') { h += listHTML(p, null, 'ms', 'plan') + listHTML(p, null, 'staff', 'plan'); }
+      K.planLists.filter((n) => D.L[n].group === g).forEach((n) => { shown.add(n); h += listHTML(p, null, n, 'plan'); });
     });
+    K.planLists.filter((n) => !shown.has(n)).forEach((n) => { h += listHTML(p, null, n, 'plan'); });
     h += `<div class="card"><h3>管理</h3><div class="row"><button class="danger" data-a="delPlan">刪除這個計畫</button><span class="muted">會一併刪除其中所有活動。</span></div></div>`;
     return h;
   }
@@ -237,7 +241,7 @@
     const g = M.getter(p, act);
     const chips = P.outputs.map(([k]) => {
       let done;
-      if (k[0] === '@') { const rows = M.list(p, act, k.slice(1)); const cols = M.listCols(pid, k.slice(1)).filter((c) => pid === 'p0' || c.ai === pid || D.L[k.slice(1)].scope === 'act'); done = rows.length && rows.every((r) => cols.every((c) => !M.empty(r[c.k]))); }
+      if (k[0] === '@') { const rows = M.list(p, act, k.slice(1)); const cols = M.listCols(pid, k.slice(1)).filter((c) => M.isPlanPrompt(pid) || c.ai === pid || D.L[k.slice(1)].scope === 'act'); done = rows.length && rows.every((r) => cols.every((c) => !M.empty(r[c.k]))); }
       else done = !M.empty(M.rawVal(p, act, k));
       return `<span class="chip ${done ? 'done' : ''}">${esc(M.outLabel(p, k).replace(/^實際達成情形\d：|^預定培育成果\d：/, ''))}</span>`;
     }).join('');
@@ -252,13 +256,17 @@
   function pageAct() {
     const p = plan(), act = actOf(V().actId);
     if (!act) { go({ page: 'plan' }); return ''; }
-    const tab = V().tab || 'fill';
-    let h = `<div class="row" style="margin-bottom:6px"><h2 style="margin:0">${esc(act.name)}</h2><button class="small" data-a="renameAct">改名</button><span class="muted">${esc(D.ACT[act.type].name)}</span></div>`;
-    h += `<div class="tabs">${[['fill', '填寫'], ['ai', 'AI 產生'], ['photos', '照片'], ['files', '範本與下載']].map(([k, n]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+    const AT = D.ACT[act.type];
+    const tabs = [['fill', '填寫'], ['ai', 'AI 產生']].concat(AT.photoGroups ? [['photos', '照片']] : [], [['files', '範本與下載']]);
+    let tab = V().tab || 'fill';
+    if (!tabs.some(([k]) => k === tab)) tab = 'fill';
+    let h = `<div class="row" style="margin-bottom:6px"><h2 style="margin:0">${esc(act.name)}</h2><button class="small" data-a="renameAct">改名</button><span class="muted">${esc(AT.name)}</span></div>`;
+    h += `<div class="tabs">${tabs.map(([k, n]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
     h += conflictPanel(p, act);
     if (tab === 'fill') h += tabFill(p, act);
     if (tab === 'ai') {
-      h += `<div class="note">建議先到「計畫資料」用「從計畫書擷取基本資料」填好共用資料，再依序產生以下內容。每段 prompt 都會帶入已填好的資料當背景。</div>`;
+      const pp = M.kindOf(p).planPrompt;
+      h += `<div class="note">${pp ? `建議先到「計畫資料」用「${esc(D.P[pp].title)}」填好共用資料，再依序產生以下內容。` : ''}每段 prompt 都會帶入已填好的資料當背景。</div>`;
       D.ACT[act.type].prompts.concat(act.customTemplates.filter((c) => Object.values(c.map).some((k) => p.customFields[k] && p.customFields[k].ai)).map((c) => 'c_' + c.id)).forEach((pid) => { h += promptCard(p, act, pid); });
     }
     if (tab === 'photos') h += tabPhotos(p, act);
@@ -275,8 +283,7 @@
       const lists = T.lists.filter((n) => (D.L[n].actGroup || D.L[n].group) === g);
       if (groups[g]) {
         h += `<div class="card"><h3>${esc(g)}</h3><div class="grid">${groups[g].map((k) => fieldHTML(p, act, k)).join('')}</div>`;
-        if (g === '查訪內容') h += `<div class="calc" style="margin-top:8px">輸出時的查訪時間：${esc(D.C.visitTime.fn(M.getter(p, act))) || '—'}</div>`;
-        if (g === '經費運用') { const gg = M.getter(p, act); h += `<div class="calc" style="margin-top:8px">執行率（自動計算，以補助款為分母）：人事費 ${gg('bud1_rate') || '—'}、其他費用 ${gg('bud2_rate') || '—'}、合計 ${gg('budTotalFmt') || '—'}／${gg('budTotalRate') || '—'}</div>`; }
+        if (T.calcs && T.calcs[g]) h += `<div class="calc" style="margin-top:8px">${esc(T.calcs[g](M.getter(p, act)))}</div>`;
         h += '</div>';
       }
       lists.forEach((n) => { h += listHTML(p, act, n, 'act'); });
@@ -288,11 +295,12 @@
   }
 
   function tabPhotos(p, act) {
-    const groups = Object.keys(D.PHOTO_GROUPS);
+    const PG = D.ACT[act.type].photoGroups || {};
+    const groups = Object.keys(PG);
     let h = `<div class="note">照片會壓縮後存在這台電腦的瀏覽器，下載簡報時自動放進投影片（每頁 2 張，說明文字放在照片下方）。</div>`;
     groups.forEach((g) => {
       const list = act.photos.filter((x) => x.group === g);
-      h += `<div class="card"><h3>${esc(D.PHOTO_GROUPS[g])}（${list.length}）</h3>
+      h += `<div class="card"><h3>${esc(PG[g])}（${list.length}）</h3>
         <div class="row" style="margin-bottom:10px"><label class="btn">上傳照片<input type="file" accept="image/*" multiple hidden data-upphoto="${g}"></label></div>
         <div class="photos">${list.map((ph) => `<div class="photo"><img data-ph="${ph.id}" alt=""><input data-cap="${ph.id}" value="${esc(ph.caption)}" placeholder="照片說明" style="margin-top:6px">
           <div class="row" style="margin-top:4px"><button class="small" data-a="phUp" data-id="${ph.id}">← 前移</button><button class="small danger" data-a="phDel" data-id="${ph.id}">刪除</button></div></div>`).join('')}</div></div>`;
@@ -323,7 +331,7 @@
       const box = $('#tplFields');
       try {
         const { fields: raw, lists } = await scanTpl(act, t.id);
-        const order = Object.keys(D.F);
+        const order = M.kindFields(p);
         const fields = raw.slice().sort((a, b) => (order.indexOf(a) < 0 ? 999 : order.indexOf(a)) - (order.indexOf(b) < 0 ? 999 : order.indexOf(b)));
         const planK = fields.filter((k) => M.scopeOf(p, k) === 'plan'), actK = fields.filter((k) => M.scopeOf(p, k) !== 'plan');
         let h = '';
@@ -336,7 +344,7 @@
       } catch (e) { box.innerHTML = `<div class="card warn">${esc(e.message)}</div>`; }
     }, 0);
     let note = '';
-    if (t.photos) note = `<div class="note">簡報會自動帶入「照片」頁上傳的照片；查核點超過 7 列、人員超過 5 位、實習廠商超過 3 家時自動分頁並標示 (1/2)。</div>`;
+    if (t.note) note = `<div class="note">${esc(t.note)}</div>`;
     return `<div class="row" style="margin-bottom:10px"><h2 style="margin:0"><span class="kind ${t.kind}">${t.kind === 'pptx' ? 'PPT' : 'Word'}</span>${esc(t.name)}</h2><span class="grow"></span><span class="muted" id="tplBlank"></span><button class="primary" data-a="dl" data-t="${t.id}">下載</button></div>
       <div class="muted" style="margin-bottom:10px">所屬活動：<a href="#" data-go="act:${act.id}">${esc(act.name)}</a></div>${note}${conflictPanel(p, act)}<div id="tplFields"><div class="muted">讀取範本中…</div></div>`;
   }
@@ -466,10 +474,10 @@
   function closeModal() { $('#modal').hidden = true; $('#mbox').innerHTML = ''; }
 
   function newActDlg() {
-    const p = plan();
+    const p = plan(), types = M.actTypes(p);
     openModal(`<h3>新增活動</h3>
-      <div class="fld"><label>活動類型</label><select id="naType">${Object.keys(D.ACT).map((k) => `<option value="${k}">${esc(D.ACT[k].name)}</option>`).join('')}</select></div>
-      <div class="fld"><label>活動名稱</label><input id="naName" placeholder="例：${esc(p.data.year || '')}學年度人培查訪"></div>
+      <div class="fld"><label>活動類型</label><select id="naType">${types.map((k) => `<option value="${k}">${esc(D.ACT[k].name)}</option>`).join('')}</select></div>
+      <div class="fld"><label>活動名稱</label><input id="naName" placeholder="例：${esc(p.data.year || '')}學年度${esc(D.ACT[types[0]].name)}"></div>
       <div class="fld"><label>沿用前一個活動的內容（可不選）</label><select id="naCopy"><option value="">不沿用，從空白開始</option>${p.activities.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select></div>
       <div class="muted">沿用時會複製該活動已填的欄位與表格（不含照片、AI 回覆），之後再修改。計畫共用資料本來就會自動帶入。</div>`, () => {
       const type = $('#naType').value, from = $('#naCopy').value ? actOf($('#naCopy').value) : null;
@@ -479,10 +487,14 @@
     });
   }
   function newPlanDlg() {
-    openModal(`<h3>新增計畫</h3><div class="fld"><label>計畫名稱</label><input id="npName"></div>
-      <label class="row" style="margin:6px 0"><input type="checkbox" id="npCopy" style="width:auto" checked> 複製目前計畫的學校、系所、主持人等基本資料</label>`, () => {
-      const np = M.newPlan(false);
-      if ($('#npCopy').checked) ['school', 'dept', 'pi', 'piTitle', 'park', 'field', 'type'].forEach((k) => { if (plan().data[k]) np.data[k] = plan().data[k]; });
+    // 只有一種計畫類別時不顯示類別選單
+    const kinds = Object.keys(D.KINDS), curKind = plan().kind || D.DEFAULT_KIND;
+    const kindSel = kinds.length > 1 ? `<div class="fld"><label>計畫類別</label><select id="npKind">${kinds.map((k) => `<option value="${k}"${k === curKind ? ' selected' : ''}>${esc(D.KINDS[k].name)}</option>`).join('')}</select></div>` : '';
+    openModal(`<h3>新增計畫</h3>${kindSel}<div class="fld"><label>計畫名稱</label><input id="npName"></div>
+      <label class="row" style="margin:6px 0"><input type="checkbox" id="npCopy" style="width:auto" checked> 複製目前計畫的學校、系所、主持人等基本資料（同類別時）</label>`, () => {
+      const kind = $('#npKind') ? $('#npKind').value : D.DEFAULT_KIND;
+      const np = M.newPlan(false, kind);
+      if ($('#npCopy').checked && curKind === kind) (D.KINDS[kind].copyOnNew || []).forEach((k) => { if (plan().data[k]) np.data[k] = plan().data[k]; });
       np.name = $('#npName').value.trim() || '新計畫'; np.data.title = np.name;
       S.plans.push(np); S.cur = np.id; go({ page: 'plan' });
       if (self.__talentFile) self.__talentFile.attach(S.cur, false);
@@ -528,7 +540,7 @@
     const names = Array.from(new Set(sc.names.filter((n) => n[0] !== '@').map((n) => (n[0] === '?' ? n.slice(1).split('=')[0] : n).trim())));
     if (!names.length) return alert('這個檔案裡沒有 {{欄位名稱}} 標記。請先在 Word／PowerPoint 中把要填的地方改成 {{欄位名稱}}。');
     p.aliases = p.aliases || {};
-    const all = Object.keys(D.F).map((k) => ({ k, label: D.F[k].label })).concat(Object.keys(D.C).map((k) => ({ k, label: k })), Object.keys(p.customFields).map((k) => ({ k, label: p.customFields[k].label })));
+    const all = M.kindFields(p).map((k) => ({ k, label: D.F[k].label })).concat(Object.keys(D.C).map((k) => ({ k, label: k })), Object.keys(p.customFields).map((k) => ({ k, label: p.customFields[k].label })));
     const rows = names.map((n) => {
       let auto = D.F[n] || D.C[n] || p.customFields[n] ? n : p.aliases[n] || (all.find((x) => x.label === n) || {}).k;
       const sugg = all.map((x) => ({ k: x.k, label: x.label, s: Math.max(dice(n, x.label), x.label.indexOf(n) >= 0 || n.indexOf(x.label) >= 0 ? 0.6 : 0) })).filter((x) => x.s >= 0.34).sort((a, b) => b.s - a.s).slice(0, 6);
@@ -570,14 +582,14 @@
       files[k] = { name: f.name, b64: btoa(s) };
     }
     const d = new Date(); const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-    saveBlob(new Blob([JSON.stringify({ app: 'talent', version: VERSION, state: S, photos, files })], { type: 'application/json' }), `計畫工作台備份_${stamp}.json`);
+    saveBlob(new Blob([JSON.stringify({ app: 'talent', version: VERSION, state: S, photos, files })], { type: 'application/json' }), `你畫了嗎備份_${stamp}.json`);
   }
   async function importBackup(file) {
     if (!file) return;
     let d; try { d = JSON.parse(await file.text()); } catch (e) { return alert('這不是有效的備份檔。'); }
     if (d.app !== 'talent' || !d.state) return alert('這不是本網站的備份檔。');
     if (!confirm('匯入會覆蓋目前這台電腦上的所有資料，確定？')) return;
-    S = d.state;
+    S = M.migrate(d.state);
     for (const k of Object.keys(d.photos || {})) await idbPut('photos', k, d.photos[k]);
     for (const k of Object.keys(d.files || {})) { const b = atob(d.files[k].b64); const u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); await idbPut('files', k, { buf: u.buffer, name: d.files[k].name }); }
     Object.keys(scanCache).forEach((k) => delete scanCache[k]);
@@ -589,7 +601,8 @@
   async function sha(s) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('talent:' + s)); return Array.from(new Uint8Array(b)).map((x) => x.toString(16).padStart(2, '0')).join(''); }
   function start() {
     S = load() || seed();
-    if (!S.plans.length) S = seed();
+    if (!S.plans || !S.plans.length) S = seed();
+    M.migrate(S);
     save(true);
     $('#lock').hidden = true; $('#app').hidden = false;
     render();

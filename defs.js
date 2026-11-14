@@ -1,4 +1,6 @@
-/* 欄位、清單、範本、活動類型、prompt 與初始資料定義 */
+/* 計畫類別、欄位、清單、範本、活動類型、prompt 與初始資料定義
+   新增計畫類別：在下方 KINDS 加一個區塊（名稱、計畫欄位、計畫清單、計畫層 prompt、活動類型、prompt 開頭的文件名稱），
+   並在 F／L／T／ACT／P 定義該類別用到的欄位、清單、範本、活動與 prompt；app.js、model.js、engine.js 不需修改。 */
 (function () {
   const num = (v) => { const n = parseFloat(String(v == null ? '' : v).replace(/[,\s元]/g, '')); return isNaN(n) ? null : n; };
   const fmt = (v) => { const n = num(v); return n == null ? '' : n.toLocaleString('en-US'); };
@@ -129,7 +131,7 @@
       { k: 'due', label: '應完成時間', scope: 'plan', w: 15 },
       { k: 'actual', label: '實際完成時間', scope: 'act', ai: 'p2', w: 15 },
       { k: 'diff', label: '差異分析說明', scope: 'act', ai: 'p2', w: 40, area: 1 }] },
-    staff: { label: '計畫人員', scope: 'plan', group: '計畫內容', actGroup: '查核點與計畫人員', cols: [
+    staff: { label: '計畫人員', scope: 'plan', group: '計畫內容', actGroup: '查核點與計畫人員', idCols: 3, cols: [
       { k: 'name', label: '姓名', scope: 'plan', w: 10 },
       { k: 'pos', label: '現職', scope: 'plan', w: 12 },
       { k: 'role', label: '在本計畫所擔任之職務', scope: 'plan', w: 14 },
@@ -180,21 +182,32 @@
     selfeval: { name: '3.執行進度自評報告(B式)', file: 'templates/selfeval.docx', kind: 'docx' },
     briefing: { name: '4.實地查訪報告簡報', file: 'templates/briefing.pptx', kind: 'pptx',
       splits: { 5: { list: 'ms', max: 7 }, 8: { list: 'staff', max: 5 }, 10: { list: 'interns', max: 3 } },
-      photos: [{ group: 'intern', after: 10, title: '四、企業實習辦理情形（照片）' }, { group: 'attach', after: 13, title: '附件：佐證照片' }] },
+      photos: [{ group: 'intern', after: 10, title: '四、企業實習辦理情形（照片）' }, { group: 'attach', after: 13, title: '附件：佐證照片' }],
+      note: '簡報會自動帶入「照片」頁上傳的照片；查核點超過 7 列、人員超過 5 位、實習廠商超過 3 家時自動分頁並標示 (1/2)。' },
   };
   const PHOTO_GROUPS = { intern: '企業實習情形照片（放在簡報第 10 頁之後）', attach: '附件佐證照片（放在簡報最後）' };
 
   // ---------------- 活動類型 ----------------
+  // calcs：在該欄位群組下方顯示的自動計算說明；optional：計算「尚有幾個欄位空白」時略過的欄位；
+  // photoGroups：照片分組（沒有則不顯示「照片」頁）；init：新增活動時的初始內容
   const ACT = {
     visit: { name: '人培查訪', templates: ['reply', 'schedule', 'transport', 'selfeval', 'briefing'],
       groups: ['行程調查回函', '建議時段 1', '建議時段 2', '建議時段 3', '學校企業實習狀況', '查訪內容', '查訪議程', '交通位置圖', '培育成果達成情形', '查核點與計畫人員', '經費運用', '企業實習辦理情形', '執行進度自評', '簡報文字'],
       lists: ['agenda', 'ms', 'staff', 'interns'],
-      prompts: ['p1', 'p2', 'p3', 'p4'] },
+      prompts: ['p1', 'p2', 'p3', 'p4'],
+      photoGroups: PHOTO_GROUPS,
+      optional: ['partnerOther', 'officeEmail', 's1firm', 's2firm', 's3firm', 'evalDate'],
+      calcs: {
+        查訪內容: (g) => `輸出時的查訪時間：${C.visitTime.fn(g) || '—'}`,
+        經費運用: (g) => `執行率（自動計算，以補助款為分母）：人事費 ${g('bud1_rate') || '—'}、其他費用 ${g('bud2_rate') || '—'}、合計 ${g('budTotalFmt') || '—'}／${g('budTotalRate') || '—'}`,
+      },
+      init: (a, g, uid) => { if (!(a.lists.agenda || []).length) a.lists.agenda = agendaTimes(defaultAgenda(g), g('visitStart')).map((r) => Object.assign({ id: uid() }, r)); } },
     blank: { name: '空白活動（只用自訂範本）', templates: [], groups: [], lists: [], prompts: [] },
   };
 
   // ---------------- Prompt ----------------
-  const PREFACE = (g) => `你是協助大學教師撰寫「${g('year') || ''}學年度科學園區人才培育補助計畫」行政文件的助理。
+  // 開頭的文件名稱由計畫類別的 docName 提供
+  const PREFACE = (g, K) => `你是協助大學教師撰寫「${K && K.docName ? K.docName(g) : '計畫'}」行政文件的助理。
 請只根據本筆記本中的來源資料（計畫書、實習紀錄、會議紀錄、學生回饋等）撰寫：
 - 來源沒有提到的內容，請寫「（資料未提及）」，不要推測或編造數字、人名、日期。
 - 使用繁體中文、正式公文語氣；日期用民國紀年（例：115年12月2日），數字用阿拉伯數字。
@@ -217,6 +230,7 @@
       context: ['school', 'dept', 'venue', 'address'],
       outputs: [['transport', '分高鐵、台鐵、接駁巴士、計程車等，一行一種，格式「**高鐵：**說明」，每行 1–2 句'], ['transportLink', '一句話說明更多位置圖與乘車時刻可參考的網頁，附網址']] },
     p2: { scope: 'act', title: '執行成果：查核點、培育成果、人力', desc: '產出簡報第 5–8 頁與自評報告「預定培育成果達成情形」。',
+      extra: (list) => { const ag = list('staff'); return ag.length ? [`- 計畫人員：${ag.map((s) => `${s.name}（${s.role}）`).join('、')}`] : []; },
       context: ['title', 'type', 'periodFrom', 'periodTo', 'visitDate', 'partnerPark', 'students', 'doneDate', 'doneN', 'doneHrs', 'ongoDate', 'ongoN', 'ongoHrs', 'nextDate', 'nextN', 'nextHrs', ...OC.map((_, i) => `oc${i + 1}_plan`)],
       outputs: [['@ms', '截至查訪日的實際完成時間；未完成寫「進行中」或「尚未開始」。差異分析說明 1–2 句，如期完成寫「依規劃如期完成」'],
         ...OC.map((n, i) => [`oc${i + 1}_act`, `對照預定成果，寫「${n}」目前實際達成情形，1–3 句，具體寫人數、時數、名稱`]),
@@ -235,9 +249,25 @@
         ['reviewSlide', '把「結論：困難與建議」改寫成簡報用精簡條列，每點不超過 30 字，一行一點']] },
   };
 
+  // ---------------- 計畫類別 ----------------
+  // planFields：計畫資料頁的欄位；planLists：計畫共用的表格；planPrompt：計畫資料頁的擷取 prompt；
+  // acts：可新增的活動類型（「空白活動」所有類別都有）；copyOnNew：新增同類別計畫時可複製的欄位；
+  // planCalcs：計畫資料頁某欄位群組下方的自動計算說明；docName：prompt 開頭的文件名稱
+  const KINDS = {
+    talent: { name: '人才培育補助計畫',
+      planFields: Object.keys(F).filter((k) => F[k].scope === 'plan'),
+      planLists: ['ms', 'staff'],
+      planPrompt: 'p0',
+      acts: ['visit'],
+      copyOnNew: ['school', 'dept', 'pi', 'piTitle', 'park', 'field', 'type'],
+      planCalcs: { 合作廠商與經費: (g) => `計畫總經費（自動加總）：${C.totalFmt.fn(g) || '—'}` },
+      docName: (g) => `${g('year') || ''}學年度科學園區人才培育補助計畫` },
+  };
+  const DEFAULT_KIND = 'talent';
+
   // 初始資料一律空白：個人資料只存在使用者瀏覽器（用「匯入備份」載入），不放在公開程式碼中
   const SEED_PLAN = {}, SEED_LISTS = { ms: [], staff: [] }, SEED_VISIT = {}, SEED_CONFLICTS = [];
 
-  self.DEFS = { F, C, D, L, T, ACT, P, PREFACE, FORMAT, PHOTO_GROUPS, OC, EV, defaultAgenda, agendaTimes, num, fmt,
+  self.DEFS = { KINDS, DEFAULT_KIND, F, C, D, L, T, ACT, P, PREFACE, FORMAT, PHOTO_GROUPS, OC, EV, defaultAgenda, agendaTimes, num, fmt,
     SEED: { plan: SEED_PLAN, lists: SEED_LISTS, visit: SEED_VISIT, conflicts: SEED_CONFLICTS } };
 })();
