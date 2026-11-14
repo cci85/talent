@@ -1,6 +1,6 @@
 /* 計畫工作台：介面 */
 (function () {
-  const VERSION = '2026.11.12-3';
+  const VERSION = '2026.11.14-1';
   const D = self.DEFS, M = self.MODEL, E = self.TalentEngine;
   const KEY = 'talent.v1', PWKEY = 'talent.pw';
   const $ = (s, el) => (el || document).querySelector(s);

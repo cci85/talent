@@ -281,6 +281,28 @@
       status(`已建立「${dir.name}／${name}.md」，之後的修改會自動存檔。`);
     });
   }
+  // 換資料夾：把目前計畫改存到另一個資料夾（同一個計畫，不另建副本）；可選擇刪除原位置的舊檔
+  async function moveDir() {
+    const p = T.plan(); if (!proj.bound) return saveToDir(false);
+    await writeNow();
+    const oldDir = proj.dir, file = proj.file, stem = stemOf(file);
+    const dir = await chooseDir(); if (!dir) return;
+    if (await dir.isSameEntry(oldDir)) { status('選的是同一個資料夾，沒有變更。', 'warn'); return; }
+    const exist = await dir.getFileHandle(file).then((h) => h.getFile()).then((x) => x.text()).catch(() => null);
+    if (exist != null) {
+      const d = parseFile(exist);
+      if (!d || d.plan.id !== p.id) { alert(`資料夾「${dir.name}」裡已經有另一個「${file}」，沒有做任何變更。請換一個資料夾，或先用「另存新檔」取不同的名稱。`); return; }
+    }
+    proj.lastPayload = '';
+    setBind(p, dir, file, 0);
+    await writeNow();
+    if (!proj.bound) return;
+    if (confirm(`已改存到「${dir.name}／${file}」。\n\n要刪除原本位置「${oldDir.name}」裡的舊檔「${file}」和「${stem}_檔案」資料夾嗎？\n（按「取消」則保留舊檔，可自行刪除）`)) {
+      try { await oldDir.removeEntry(file); } catch (e) {}
+      try { await oldDir.removeEntry(stem + '_檔案', { recursive: true }); } catch (e) {}
+      status(`已改存到「${dir.name}／${file}」，並刪除原位置的舊檔。`);
+    } else status(`已改存到「${dir.name}／${file}」；原位置「${oldDir.name}」的舊檔保留。`);
+  }
   function downloadMd() {
     const p = T.plan(), name = safeName(p.name || p.data.title || '計畫');
     T.saveBlob(new Blob([fileText(p, '', name)], { type: 'text/markdown' }), name + '.md');
@@ -333,7 +355,7 @@
     bar.innerHTML = `<span class="fcur">${cur}</span>
       ${needResume && proj.dir ? `<button class="small primary" data-f="resume">繼續使用「${esc(proj.dir.name)}／${esc(proj.file)}」</button>` : ''}
       <button class="small" data-f="open">${FS_OK ? '開啟計畫檔' : '開啟 .md'}</button>
-      ${FS_OK ? `<button class="small" data-f="${proj.bound ? 'saveas' : 'save'}">${proj.bound ? '另存新檔' : '存到資料夾'}</button>` : '<button class="small" data-f="dl">下載 .md</button>'}
+      ${FS_OK ? (proj.bound ? '<button class="small" data-f="move" title="同一個計畫改存到另一個資料夾">換資料夾</button><button class="small" data-f="saveas" title="複製成另一個計畫，原檔保留">另存新檔</button>' : '<button class="small" data-f="save">存到資料夾</button>') : '<button class="small" data-f="dl">下載 .md</button>'}
       ${undo && undo.plan ? `<button class="small" data-f="undo" title="${esc(undo.stamp)}">復原載入前的內容</button>` : ''}
       <span id="fstat" class="fstat ${proj.cls}">${esc(proj.msg)}</span>
       <input type="file" id="fupload" accept=".md" hidden>`;
@@ -345,6 +367,7 @@
     if (a === 'open') return openPlan();
     if (a === 'save') return saveToDir(false);
     if (a === 'saveas') return saveToDir(true);
+    if (a === 'move') return moveDir();
     if (a === 'dl') return downloadMd();
     if (a === 'resume') { if (await attach(proj.planId, true)) renderBar(); return; }
     if (a === 'undo') {
