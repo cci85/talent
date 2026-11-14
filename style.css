@@ -22,7 +22,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 .fstat { color: var(--muted); font-size: 13px; }
 .filepick { display: block; width: 100%; text-align: left; margin-bottom: 6px; }
 .filepick small { display: block; color: var(--muted); }
-#banner { background: #fff3cd; border-bottom: 1px solid #e0c36b; padding: 8px 16px; text-align: center; }
+#banner { position: sticky; top: 0; z-index: 50; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; padding: 10px 16px; background: #fbf0dc; color: #9a5b00; border-bottom: 1px solid #9a5b00; font-weight: 600; }
+#banner[hidden] { display: none; }
+#banner button { padding: 5px 12px; border: 1px solid #9a5b00; border-radius: 8px; background: #9a5b00; color: #fff; font: inherit; cursor: pointer; }
+#banner small { font-weight: 400; }
 #lock { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg); }
 .lockbox { background: #fff; padding: 32px; border-radius: 10px; width: 320px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 20px #0001; }
 .lockbox h1 { margin: 0; font-size: 20px; }

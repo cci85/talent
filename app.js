@@ -1,6 +1,6 @@
 /* 你畫了沒：介面 */
 (function () {
-  const VERSION = '2026.11.14-4';
+  const VERSION = '2026.11.14-5';
   const D = self.DEFS, M = self.MODEL, E = self.TalentEngine;
   const KEY = 'talent.v1', PWKEY = 'talent.pw';
   const $ = (s, el) => (el || document).querySelector(s);
@@ -628,9 +628,25 @@
     ['#pw1', '#pw2'].forEach((s) => $(s).addEventListener('keydown', (e) => { if (e.key === 'Enter') goBtn(); }));
     $('#pw1').focus();
   }
-  fetch('version.json', { cache: 'no-store' }).then((r) => r.json()).then((j) => {
-    if (j.version && j.version !== VERSION) { const b = $('#banner'); b.hidden = false; b.textContent = '網站已更新，請按 Ctrl+F5 重新整理。資料存在這台電腦的瀏覽器，重新整理不會遺失。'; }
-  }).catch(() => {});
+  // 網站更新提示：定期（與切回分頁時）比對 version.json，不同時顯示提示，按下即存檔並載入新版
+  (() => {
+    let last = 0;
+    const check = () => {
+      if (Date.now() - last < 60000) return; last = Date.now();
+      fetch('version.json?nv=' + Date.now(), { cache: 'no-store' }).then((r) => r.json()).then((j) => {
+        if (j.version && j.version !== VERSION) $('#banner').hidden = false;
+      }).catch(() => {});
+    };
+    check();
+    setInterval(check, 5 * 60000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+    window.addEventListener('focus', check);
+    $('#newverbtn').addEventListener('click', async () => {
+      try { saveLocal(); } catch (e) {}
+      try { if (self.__talentFile && self.__talentFile.proj.timer) await self.__talentFile.writeNow(); } catch (e) {}
+      location.href = location.pathname + '?r=' + Date.now();
+    });
+  })();
   const kvGet = (k) => idbGet('kv', k).catch(() => null);
   const kvSet = (k, v) => idbPut('kv', k, v).catch(() => {});
   self.__talent = { get S() { return S; }, get started() { return started; }, plan, render, saveLocal, idbGet, idbPut, kvGet, kvSet, dataUrlBytes, openModal, closeModal, saveBlob, buildFile, M };
