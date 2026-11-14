@@ -1,6 +1,6 @@
 /* 你畫了沒：介面 */
 (function () {
-  const VERSION = '2026.11.14-3';
+  const VERSION = '2026.11.14-4';
   const D = self.DEFS, M = self.MODEL, E = self.TalentEngine;
   const KEY = 'talent.v1', PWKEY = 'talent.pw';
   const $ = (s, el) => (el || document).querySelector(s);
@@ -195,7 +195,7 @@
   // ---------------- 頁面 ----------------
   function renderSide() {
     const p = plan(), v = V();
-    let h = `<div class="sec">計畫</div><a data-go="plan" class="${v.page === 'plan' ? 'on' : ''}">計畫資料${conflictsFor(p, null).length ? ' <span class="tag cf badge">' + conflictsFor(p, null).length + '</span>' : ''}</a>`;
+    let h = `<div class="sec">計畫</div><a data-go="plan" class="${v.page === 'plan' ? 'on' : ''}">${esc(p.name || '計畫資料')}${conflictsFor(p, null).length ? ' <span class="tag cf badge">' + conflictsFor(p, null).length + '</span>' : ''}</a>`;
     h += `<div class="sec">活動 <button class="small" data-a="newAct">＋活動</button></div>`;
     p.activities.forEach((a) => {
       const n = (p.conflicts || []).filter((c) => c.actId === a.id).length;
@@ -219,8 +219,8 @@
     const K = M.kindOf(p);
     const keys = K.planFields.concat(Object.keys(p.customFields).filter((k) => p.customFields[k].scope === 'plan'));
     const groups = groupedFields(p, keys);
-    let h = `<div class="row" style="margin-bottom:6px"><h2 style="margin:0">計畫資料</h2><span class="muted">計畫類別：${esc(K.name)}</span></div><div class="note">這裡的資料所有活動、所有範本共用；在任何地方修改都會同步。${K.planPrompt ? '可先用下方 prompt 從計畫書一次擷取。' : ''}</div>`;
-    h += `<div class="card"><div class="grid"><div class="fld"><label>計畫顯示名稱（只用於切換計畫）</label><input data-pn="1" value="${esc(p.name)}"></div></div></div>`;
+    let h = `<div class="row" style="margin-bottom:6px"><h2 style="margin:0" id="planH">${esc(p.name || '計畫資料')}</h2><span class="muted">計畫共用資料｜計畫類別：${esc(K.name)}</span></div><div class="note">這裡的資料所有活動、所有範本共用；在任何地方修改都會同步。${K.planPrompt ? '可先用下方 prompt 從計畫書一次擷取。' : ''}</div>`;
+    h += `<div class="card"><div class="grid"><div class="fld"><label>計畫名稱（顯示在左側選單與上方切換選單）</label><input data-pn="1" value="${esc(p.name)}"></div></div></div>`;
     h += conflictPanel(p, null);
     if (K.planPrompt) h += promptCard(p, null, K.planPrompt);
     const shown = new Set();
@@ -266,7 +266,7 @@
     if (tab === 'fill') h += tabFill(p, act);
     if (tab === 'ai') {
       const pp = M.kindOf(p).planPrompt;
-      h += `<div class="note">${pp ? `建議先到「計畫資料」用「${esc(D.P[pp].title)}」填好共用資料，再依序產生以下內容。` : ''}每段 prompt 都會帶入已填好的資料當背景。</div>`;
+      h += `<div class="note">${pp ? `建議先到「${esc(p.name || '計畫資料')}」（左側計畫）用「${esc(D.P[pp].title)}」填好共用資料，再依序產生以下內容。` : ''}每段 prompt 都會帶入已填好的資料當背景。</div>`;
       D.ACT[act.type].prompts.concat(act.customTemplates.filter((c) => Object.values(c.map).some((k) => p.customFields[k] && p.customFields[k].ai)).map((c) => 'c_' + c.id)).forEach((pid) => { h += promptCard(p, act, pid); });
     }
     if (tab === 'photos') h += tabPhotos(p, act);
@@ -388,7 +388,7 @@
     else if (el.dataset.l) setCell(el);
     else if (el.dataset.resp) { const p = plan(), act = actOf(V().actId); const store = V().page === 'plan' ? (p.responses = p.responses || {}) : act.responses; store[el.dataset.resp] = el.value; save(); }
     else if (el.dataset.cap) { const act = actOf(V().actId); const ph = act.photos.find((x) => x.id === el.dataset.cap); if (ph) { ph.caption = el.value; save(); } }
-    else if (el.dataset.pn) { plan().name = el.value; save(); renderSide(); }
+    else if (el.dataset.pn) { plan().name = el.value; save(); renderSide(); const hh = $('#planH'); if (hh) hh.textContent = el.value || '計畫資料'; }
   });
   document.addEventListener('change', async (e) => {
     const el = e.target;
